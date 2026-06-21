@@ -292,72 +292,175 @@ When the code is successfully uploaded you will get an output at the bottom of t
 
 You will hear another beep as the device reconnects to the PC. 
 
-### ASCOM
+## Building and flashing on Linux (arduino-cli + flash.sh)
 
-For any of this to work we need to install the "Astronomy Common Object Model" or ASCOM, this is a set of API specifications that make it easy for different vendors products talk to other vendors software. You can download it from this link.
+If you are on Linux you can skip the Arduino IDE entirely and build/flash from the
+command line. This is the workflow used by the `flash.sh` script in the root of this
+repository, which compiles the sketch and uploads it over DFU in one step.
 
-https://www.ascom-standards.org/Downloads/Index.htm
+> **Note on protocol:** this fork's firmware speaks the **Moonlite focuser protocol**
+> instead of the original custom G-code. On Linux that means you use the standard
+> **INDI MoonLite focuser driver** (the equivalent of the Windows ASCOM driver
+> described in the next section) rather than installing ASCOM. You can also test the
+> board directly with the included `focuser_moonlite.py` script.
 
-Install it and move on to the next step.
+### 1. Install the prerequisites
 
-### ASCOM driver installer.
+You need four things on your `PATH`:
 
-The windows ASCOM driver can be found in folder
+* **arduino-cli** — https://arduino.github.io/arduino-cli/ (tested with 1.5.1)
+* **STM32CubeProgrammer** — https://www.st.com/en/development-tools/stm32cubeprog.html
+  (provides `STM32_Programmer.sh`, used by the upload step)
+* **dfu-util** and **usbutils** (`lsusb`) — from your distribution's package manager,
+  e.g. `sudo apt install dfu-util usbutils`
 
-"%UserProfile%\Downloads\Realta-EBBfocuser-main\Realta-EBBfocuser-main\ASCOM driver"
+STM32CubeProgrammer does not add itself to your `PATH`. Add its `bin` directory, for
+example in `~/.bashrc`:
 
-First the properties of the InstallDriver.bat file need to be changed to allow windows to run a downloaded file. Right click on the file and choose "Properties"
+```bash
+export PATH="$HOME/STMicroelectronics/STM32Cube/STM32CubeProgrammer/bin:$PATH"
+```
 
-![Windows Defender fun](../Guide/Images/BATProperty.png)
+Adjust the path to wherever you installed it, then open a new shell and confirm:
 
-Tick the little box in the bottom right.
+```bash
+arduino-cli version
+STM32_Programmer.sh --version
+```
 
-![Windows Defender fun](../Guide/Images/InstallBatProperties.png)
+### 2. Install the STM32 board core and TMCStepper library
 
-Now right click InstallDriver.bat and choose "Run as administrator"
+Tell arduino-cli where to find the stm32duino boards, then install the core and the
+TMC2209 driver library:
 
-![Windows Defender fun](../Guide/Images/RunBATasAdmin.png)
+```bash
+arduino-cli config init
+arduino-cli config add board_manager.additional_urls \
+  https://github.com/stm32duino/BoardManagerFiles/raw/main/package_stmicroelectronics_index.json
+arduino-cli core update-index
+arduino-cli core install STMicroelectronics:stm32
+arduino-cli lib install TMCStepper
+```
 
-Success should look like this with two "Types registered successfully" messages.
+(The `SoftwareSerial` library used for TMC UART ships with the STM32 core — no separate
+install needed.)
 
-![Windows Defender fun](../Guide/Images/BATSuccess.png)
+### 3. Enable EEPROM (FLASH_BANK_NUMBER edit)
 
-Press any key to get this window to close or wait 200 seconds and it will close itself.
+This is the same flash-memory fix described in the Windows section above, but the file
+lives in the arduino-cli data directory. Find the variant header (the core version in
+the path will match what you installed):
 
-## How to use ASCOM driver (Using N.I.N.A).
+```bash
+find ~/.arduino15/packages/STMicroelectronics/hardware/stm32 \
+  -name 'variant_EBB42_V1_1.h'
+```
 
-Now that you have all the software installed you can start using the focuser. In order to use it you need telescope control software. In this section I am going to use N.I.N.A as the software. 
+Open that file and make sure it contains the line:
 
-https://nighttime-imaging.eu/
+```c
+#define FLASH_BANK_NUMBER FLASH_BANK_1
+```
 
-![Windows Defender fun](../Guide/Images/NINAFocuser01.png)
+Recent core versions already include it; older ones do not. **Without this line the code
+compiles and uploads fine but the focuser never remembers its position.**
 
-Opening the settings menu is needed because the port the focuser is connected to needs to be selected.
+### 4. Allow non-root DFU access (one time)
 
-![Windows Defender fun](../Guide/Images/NINAFocuser02.png)
+In DFU mode the board shows up as USB ID `0483:df11`. To flash it without `sudo`, install
+a udev rule (most STM32 setups already ship `45-stm32dfu.rules`):
 
-If you are lucky there will be only one option to choose from, but on our PC there is a built in COM port for controling RGB lights of all things!
+```bash
+echo 'SUBSYSTEM=="usb", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="df11", MODE="0666"' \
+  | sudo tee /etc/udev/rules.d/45-stm32dfu.rules
+sudo udevadm control --reload-rules && sudo udevadm trigger
+```
 
-If its not clear what port to choose you can working out by using windows device manager (right click the start menu button) expanding the "Ports (COM & LPT)" section and unpluging the focusers USB cable from your PC, the comport should disappear from the list.
+Once running, the focuser enumerates as a serial port (`/dev/ttyACM*`). Make sure your
+user is in the `dialout` group to access it without `sudo`:
 
-![Windows Defender fun](../Guide/Images/NINAFocuser03.png)
+```bash
+sudo usermod -aG dialout "$USER"   # log out and back in for this to take effect
+```
 
-Once selelcted click ok, this will close you out of the settings window and now you need to click the "connect" button that looks like a power icon. 
+### 5. Flash with flash.sh
 
-![Windows Defender fun](../Guide/Images/NINAFocuser03a.png)
+Connect the EBB36/42 over USB **and** power it from 12–24 V, then run:
 
-If you open the settings dialog again you will see that previously greyed out settings can now be changed.
+```bash
+./flash.sh
+```
 
-![Windows Defender fun](../Guide/Images/NINAFocuser04.png)
+The script compiles the sketch and then waits for the board to appear in DFU mode. Put
+the board into upload mode the same way as in the Windows section — press and hold the
+button closest to the port panel, click the other button once, then release both:
 
-Here's what each option does.
+![click hold click](../Guide/Images/PutPCBintoUploadMode.png)
 
-* Current: This changes the max current the stepper motor can draw, its in milliamps.
-* Motor Position: You can overide the position of the motor i.e. reset it to a more useful value.
-* Micro steps: Stepper motors have a native number of steps per rotation derived from their physical design however modern stepper drivers allow you to split that native number of steps into fractions or micro steps. You have choice between 8,16,32,64,128 and 256. Please note each sub division makes the focuser turn slower and has less torgue so might slip with heavy loads.
-* Heater value: The EBB32 has a mosfet controlled output that can be used to drive DC heating elements like dew bands. This changes the power output from 0 on the left to 100% on the right. Please note this has been added just in case anyone wants to alter the case to add an RCA port or similar for a dew controller, its not actually used for this project.
-* Motor Engaged: When powered on stepper motors will lock themselves into position when not moving, this option allows you to turn that feature off. Please note it will automatically switch back on if you move the motor via software. This allows you to change the focus of the telescope while the focuser is connected.
+`flash.sh` detects the board (`0483:df11`), uploads the firmware, and reports when it is
+done. Unplug and replug the board afterwards; it will reappear as `/dev/ttyACM*`.
 
-Here is a pretty good guide to setting up a focuser we found on Youtube, its for a different focuser but the idea is the same.
+> The board target is set in `flash.sh` via the `FQBN` variable
+> (`pnum=EBB42_V1_1` — the EBB36 uses the same MCU and target). Edit that line if your
+> hardware differs.
 
-[![Level Up Your Astroimaging: Connect ZWO EAF to NINA Like a Pro](http://img.youtube.com/vi/XUISAvoKCrM/0.jpg)](https://www.youtube.com/watch?v=XUISAvoKCrM "Level Up Your Astroimaging: Connect ZWO EAF to NINA Like a Pro")
+### 6. Test the focuser (optional)
+
+With the firmware running you can drive the board directly using the included Python
+client (needs `pyserial`: `pip install pyserial`):
+
+```bash
+./focuser_moonlite.py            # auto-detects /dev/ttyACM*
+```
+
+It opens an interactive prompt for moving, homing, reading temperature, and tuning the
+StallGuard stall threshold. For production use, point your imaging software at the board
+through the INDI MoonLite focuser driver instead.
+
+## Using the focuser with INDI
+
+> The original project shipped a Windows **ASCOM** driver. Because this fork's firmware
+> speaks the **Moonlite** protocol instead of the original custom G-code, that prebuilt
+> driver no longer applies and has been removed. On Linux the focuser is driven through
+> the standard **INDI MoonLite focuser driver** — no custom driver needed. (Any
+> Moonlite-compatible client works, including N.I.N.A. on Windows via its built-in
+> Moonlite driver.)
+
+### Install INDI
+
+Install INDI and a client such as KStars/Ekos from your distribution or
+https://www.indilib.org/. On Debian/Ubuntu:
+
+```bash
+sudo apt install indi-bin kstars-bleeding   # or your distro's indi + kstars packages
+```
+
+The MoonLite focuser driver is part of the core INDI distribution, so no extra driver
+package is required.
+
+### Connect
+
+1. Plug in the focuser (USB + 12–24 V power). It enumerates as `/dev/ttyACM0`
+   (confirm with `ls /dev/ttyACM*`). Make sure your user is in the `dialout` group as
+   described in the Linux build section above.
+2. In Ekos, create a profile and add **MoonLite** as the Focuser.
+3. Start the profile, open the focuser's **Connection** tab, set the **Port** to
+   `/dev/ttyACM0`, and click **Connect**.
+4. The focuser's current position and temperature now appear in Ekos, and you can run
+   absolute/relative moves and autofocus.
+
+### Settings
+
+Unlike the old ASCOM driver, motor settings are stored in the board's EEPROM and tuned
+with the included `focuser_moonlite.py` tool (see the previous section) rather than from
+the client:
+
+* **Motor current**, **microsteps**, **step delay** (speed) and **step mode**
+  (full/half) are configured over serial and persisted on the board.
+* **Stall detection** (TMC2209 StallGuard) can be enabled and tuned with the `sk`/`cr`
+  commands.
+* The **dew-heater PWM** output (TH0/heater header) is available in firmware for anyone
+  who adds a heater connector to the case.
+
+Position, movement and temperature are then handled automatically by the INDI MoonLite
+driver during normal imaging.

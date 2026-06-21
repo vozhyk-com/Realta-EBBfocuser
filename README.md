@@ -16,7 +16,11 @@ The heart of our project is the Bigtree Tech EBB36, a versatile stepper motor dr
 
 **Arduino IDE Firmware:** Our custom firmware, developed in the Arduino IDE, allows for seamless communication between the EBB36 and the focusing mechanism. The firmware is open source, enabling users to modify and improve it according to their needs.
 
-**ASCOM Framework Driver:** The ASCOM (Astronomy Common Object Model) framework driver ensures compatibility with a wide range of astronomy software, providing a standardized interface for controlling the focuser through a Windows environment.
+**Moonlite Protocol (INDI-compatible):** This fork's firmware implements the widely
+supported Moonlite focuser protocol, so the focuser works with the standard INDI MoonLite
+driver on Linux and any Moonlite-compatible client — no custom driver to install. (The
+original project's Windows ASCOM driver targeted a different protocol and is not included
+in this fork.)
 
 ## Features and Benefits
 
@@ -34,11 +38,36 @@ Getting Started
 + A Bigtree Tech EBB36 stepper motor driver and microcontroller
 + A 3D printer to print the custom-designed case
 + Basic electronics tools and components
-+ The Arduino IDE for firmware installation and customization
-+ A Windows PC for installing the ASCOM driver and controlling the focuser
++ The Arduino IDE (or `arduino-cli` on Linux — see the guide) for firmware installation and customization
++ A computer running INDI (or any Moonlite-compatible client) to control the focuser
 
 We invite you to join our community, contribute to the project, and share your experiences. By working together, we can push the boundaries of what's possible in telescope focusing, making advanced astrophotography and observation more accessible to everyone.
 
 The full guide to completing this project can be found here.
 
 [Realta EBBfocuser complete guide](/Guide/ReadMe.md)
+
+## Moonlite firmware & Linux build (this fork)
+
+This fork replaces the original custom G-code serial protocol with the **Moonlite
+focuser protocol**, so the focuser works out of the box with the standard
+[INDI MoonLite driver](https://www.indilib.org/) on Linux (and any Moonlite-compatible
+client) — no Windows or ASCOM required. The firmware also adds an optional NTC
+temperature reading (TH0 header) and TMC2209 StallGuard-based stall detection.
+
+Extra tooling included here:
+
++ **`flash.sh`** — compile and flash the firmware on Linux with `arduino-cli` +
+  STM32CubeProgrammer (DFU upload), no Arduino IDE needed.
++ **`focuser_moonlite.py`** — interactive Python client for testing the Moonlite
+  firmware over USB serial (requires `pyserial`).
+
+See the [Linux build & flash section](/Guide/ReadMe.md#building-and-flashing-on-linux-arduino-cli--flashsh)
+of the guide for setup steps, and [Using the focuser with INDI](/Guide/ReadMe.md#using-the-focuser-with-indi)
+for connecting it to imaging software.
+
+> **Note:** the original Windows ASCOM driver targeted the original G-code protocol and
+> is **not** compatible with this fork's Moonlite firmware, so it has been removed.
+> You can still build the firmware with the Windows Arduino IDE if you prefer (see the
+> guide), but use a Moonlite-compatible client (INDI, or N.I.N.A.'s Moonlite driver) to
+> control it.
