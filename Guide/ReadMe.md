@@ -152,6 +152,131 @@ Connecting the EBB36 to your PC with a USB C cable will initially do nothing. Th
 
 ![Attach wires](../Guide/Images/AttachWires.png)
 
+## Building and flashing on Linux (arduino-cli + flash.sh)
+
+If you are on Linux you can skip the Arduino IDE entirely and build/flash from the
+command line. This is the workflow used by the `flash.sh` script in the root of this
+repository, which compiles the sketch and uploads it over DFU in one step.
+
+> **Note on protocol:** this fork's firmware speaks the **Moonlite focuser protocol**
+> instead of the original custom G-code. On Linux that means you use the standard
+> **INDI MoonLite focuser driver** (see the "Using the focuser with INDI" section
+> below) rather than the Windows ASCOM driver. You can also test the board directly
+> with the included `focuser_moonlite.py` script.
+
+### 1. Install the prerequisites
+
+You need four things on your `PATH`:
+
+* **arduino-cli** — https://arduino.github.io/arduino-cli/ (tested with 1.5.1)
+* **STM32CubeProgrammer** — https://www.st.com/en/development-tools/stm32cubeprog.html
+  (provides `STM32_Programmer.sh`, used by the upload step)
+* **dfu-util** and **usbutils** (`lsusb`) — from your distribution's package manager,
+  e.g. `sudo apt install dfu-util usbutils`
+
+STM32CubeProgrammer does not add itself to your `PATH`. Add its `bin` directory, for
+example in `~/.bashrc`:
+
+```bash
+export PATH="$HOME/STMicroelectronics/STM32Cube/STM32CubeProgrammer/bin:$PATH"
+```
+
+Adjust the path to wherever you installed it, then open a new shell and confirm:
+
+```bash
+arduino-cli version
+STM32_Programmer.sh --version
+```
+
+### 2. Install the STM32 board core and TMCStepper library
+
+Tell arduino-cli where to find the stm32duino boards, then install the core and the
+TMC2209 driver library:
+
+```bash
+arduino-cli config init
+arduino-cli config add board_manager.additional_urls \
+  https://github.com/stm32duino/BoardManagerFiles/raw/main/package_stmicroelectronics_index.json
+arduino-cli core update-index
+arduino-cli core install STMicroelectronics:stm32
+arduino-cli lib install TMCStepper
+```
+
+(The `SoftwareSerial` library used for TMC UART ships with the STM32 core — no separate
+install needed.)
+
+### 3. Enable EEPROM (FLASH_BANK_NUMBER edit)
+
+This is the same flash-memory fix described in the Windows / Arduino IDE section below,
+but the file lives in the arduino-cli data directory. Find the variant header (the core
+version in the path will match what you installed):
+
+```bash
+find ~/.arduino15/packages/STMicroelectronics/hardware/stm32 \
+  -name 'variant_EBB42_V1_1.h'
+```
+
+Open that file and make sure it contains the line:
+
+```c
+#define FLASH_BANK_NUMBER FLASH_BANK_1
+```
+
+Recent core versions already include it; older ones do not. **Without this line the code
+compiles and uploads fine but the focuser never remembers its position.**
+
+### 4. Allow non-root DFU access (one time)
+
+In DFU mode the board shows up as USB ID `0483:df11`. To flash it without `sudo`, install
+a udev rule (most STM32 setups already ship `45-stm32dfu.rules`):
+
+```bash
+echo 'SUBSYSTEM=="usb", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="df11", MODE="0666"' \
+  | sudo tee /etc/udev/rules.d/45-stm32dfu.rules
+sudo udevadm control --reload-rules && sudo udevadm trigger
+```
+
+Once running, the focuser enumerates as a serial port (`/dev/ttyACM*`). Make sure your
+user is in the `dialout` group to access it without `sudo`:
+
+```bash
+sudo usermod -aG dialout "$USER"   # log out and back in for this to take effect
+```
+
+### 5. Flash with flash.sh
+
+Connect the EBB36/42 over USB **and** power it from 12–24 V, then run:
+
+```bash
+./flash.sh
+```
+
+The script compiles the sketch and then waits for the board to appear in DFU mode. Put
+the board into upload mode — press and hold the button closest to the port panel, click
+the other button once, then release both:
+
+![click hold click](../Guide/Images/PutPCBintoUploadMode.png)
+
+`flash.sh` detects the board (`0483:df11`), uploads the firmware, and reports when it is
+done. Unplug and replug the board afterwards; it will reappear as `/dev/ttyACM*`.
+
+> The board target is set in `flash.sh` via the `FQBN` variable
+> (`pnum=EBB42_V1_1` — the EBB36 uses the same MCU and target). Edit that line if your
+> hardware differs.
+
+### 6. Test the focuser (optional)
+
+With the firmware running you can drive the board directly using the included Python
+client (needs `pyserial`: `pip install pyserial`):
+
+```bash
+./focuser_moonlite.py            # auto-detects /dev/ttyACM*
+```
+
+It opens an interactive prompt for moving, homing, reading temperature, and tuning the
+StallGuard stall threshold. For production use, point your imaging software at the board
+through the INDI MoonLite focuser driver instead.
+
 ## Setting up the Arduino IDE for use with EBB36.
 
 ### Install the Arduino IDE.
@@ -288,134 +413,9 @@ Once clicked the arduino code will be first compiled and then uploaded to the fo
 
 When the code is successfully uploaded you will get an output at the bottom of the arduino window something like below.
 
-![success](Guide/Images/uploadSuccessful.png)
+![success](../Guide/Images/uploadSuccessful.png)
 
 You will hear another beep as the device reconnects to the PC. 
-
-## Building and flashing on Linux (arduino-cli + flash.sh)
-
-If you are on Linux you can skip the Arduino IDE entirely and build/flash from the
-command line. This is the workflow used by the `flash.sh` script in the root of this
-repository, which compiles the sketch and uploads it over DFU in one step.
-
-> **Note on protocol:** this fork's firmware speaks the **Moonlite focuser protocol**
-> instead of the original custom G-code. On Linux that means you use the standard
-> **INDI MoonLite focuser driver** (the equivalent of the Windows ASCOM driver
-> described in the next section) rather than installing ASCOM. You can also test the
-> board directly with the included `focuser_moonlite.py` script.
-
-### 1. Install the prerequisites
-
-You need four things on your `PATH`:
-
-* **arduino-cli** — https://arduino.github.io/arduino-cli/ (tested with 1.5.1)
-* **STM32CubeProgrammer** — https://www.st.com/en/development-tools/stm32cubeprog.html
-  (provides `STM32_Programmer.sh`, used by the upload step)
-* **dfu-util** and **usbutils** (`lsusb`) — from your distribution's package manager,
-  e.g. `sudo apt install dfu-util usbutils`
-
-STM32CubeProgrammer does not add itself to your `PATH`. Add its `bin` directory, for
-example in `~/.bashrc`:
-
-```bash
-export PATH="$HOME/STMicroelectronics/STM32Cube/STM32CubeProgrammer/bin:$PATH"
-```
-
-Adjust the path to wherever you installed it, then open a new shell and confirm:
-
-```bash
-arduino-cli version
-STM32_Programmer.sh --version
-```
-
-### 2. Install the STM32 board core and TMCStepper library
-
-Tell arduino-cli where to find the stm32duino boards, then install the core and the
-TMC2209 driver library:
-
-```bash
-arduino-cli config init
-arduino-cli config add board_manager.additional_urls \
-  https://github.com/stm32duino/BoardManagerFiles/raw/main/package_stmicroelectronics_index.json
-arduino-cli core update-index
-arduino-cli core install STMicroelectronics:stm32
-arduino-cli lib install TMCStepper
-```
-
-(The `SoftwareSerial` library used for TMC UART ships with the STM32 core — no separate
-install needed.)
-
-### 3. Enable EEPROM (FLASH_BANK_NUMBER edit)
-
-This is the same flash-memory fix described in the Windows section above, but the file
-lives in the arduino-cli data directory. Find the variant header (the core version in
-the path will match what you installed):
-
-```bash
-find ~/.arduino15/packages/STMicroelectronics/hardware/stm32 \
-  -name 'variant_EBB42_V1_1.h'
-```
-
-Open that file and make sure it contains the line:
-
-```c
-#define FLASH_BANK_NUMBER FLASH_BANK_1
-```
-
-Recent core versions already include it; older ones do not. **Without this line the code
-compiles and uploads fine but the focuser never remembers its position.**
-
-### 4. Allow non-root DFU access (one time)
-
-In DFU mode the board shows up as USB ID `0483:df11`. To flash it without `sudo`, install
-a udev rule (most STM32 setups already ship `45-stm32dfu.rules`):
-
-```bash
-echo 'SUBSYSTEM=="usb", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="df11", MODE="0666"' \
-  | sudo tee /etc/udev/rules.d/45-stm32dfu.rules
-sudo udevadm control --reload-rules && sudo udevadm trigger
-```
-
-Once running, the focuser enumerates as a serial port (`/dev/ttyACM*`). Make sure your
-user is in the `dialout` group to access it without `sudo`:
-
-```bash
-sudo usermod -aG dialout "$USER"   # log out and back in for this to take effect
-```
-
-### 5. Flash with flash.sh
-
-Connect the EBB36/42 over USB **and** power it from 12–24 V, then run:
-
-```bash
-./flash.sh
-```
-
-The script compiles the sketch and then waits for the board to appear in DFU mode. Put
-the board into upload mode the same way as in the Windows section — press and hold the
-button closest to the port panel, click the other button once, then release both:
-
-![click hold click](../Guide/Images/PutPCBintoUploadMode.png)
-
-`flash.sh` detects the board (`0483:df11`), uploads the firmware, and reports when it is
-done. Unplug and replug the board afterwards; it will reappear as `/dev/ttyACM*`.
-
-> The board target is set in `flash.sh` via the `FQBN` variable
-> (`pnum=EBB42_V1_1` — the EBB36 uses the same MCU and target). Edit that line if your
-> hardware differs.
-
-### 6. Test the focuser (optional)
-
-With the firmware running you can drive the board directly using the included Python
-client (needs `pyserial`: `pip install pyserial`):
-
-```bash
-./focuser_moonlite.py            # auto-detects /dev/ttyACM*
-```
-
-It opens an interactive prompt for moving, homing, reading temperature, and tuning the
-StallGuard stall threshold. For production use, point your imaging software at the board
-through the INDI MoonLite focuser driver instead.
 
 ## Using the focuser with INDI
 
@@ -452,15 +452,13 @@ package is required.
 ### Settings
 
 Unlike the old ASCOM driver, motor settings are stored in the board's EEPROM and tuned
-with the included `focuser_moonlite.py` tool (see the previous section) rather than from
-the client:
+with the included `focuser_moonlite.py` tool (see the "Test the focuser" step in the
+Linux build section above) rather than from the client:
 
 * **Motor current**, **microsteps**, **step delay** (speed) and **step mode**
   (full/half) are configured over serial and persisted on the board.
 * **Stall detection** (TMC2209 StallGuard) can be enabled and tuned with the `sk`/`cr`
   commands.
-* The **dew-heater PWM** output (TH0/heater header) is available in firmware for anyone
-  who adds a heater connector to the case.
 
 Position, movement and temperature are then handled automatically by the INDI MoonLite
 driver during normal imaging.
