@@ -6,7 +6,7 @@ Welcome to the Realta EBBfocuser Project! This initiative is dedicated to creati
 
 ## Project Overview
 
-The heart of our project is the Bigtree Tech EBB36, a versatile stepper motor driver and microcontroller. This component is combined with a 3D printed case, custom firmware developed using the Arduino IDE, and a Windows driver built on the ASCOM framework. Together, these elements create a powerful and user-friendly telescope focuser designed for makers and enthusiasts who value customization and open-source principles.
+The heart of our project is the Bigtree Tech EBB36, a versatile stepper motor driver and microcontroller. This component is combined with a 3D printed case and custom firmware developed using the Arduino IDE that speaks the Moonlite focuser protocol, so it works with the standard INDI MoonLite driver and any other Moonlite-compatible client. Together, these elements create a powerful and user-friendly telescope focuser designed for makers and enthusiasts who value customization and open-source principles.
 
 ## Key Components
 
@@ -30,7 +30,7 @@ in this fork.)
 
 **Precision:** The Bigtree Tech EBB36 offers high precision control, essential for achieving sharp focus in astrophotography and observation.
 
-**Compatibility:** With the ASCOM driver, our focuser can be easily integrated with a wide array of existing astronomy software, enhancing its usability and versatility.
+**Compatibility:** Speaking the Moonlite protocol, our focuser integrates with a wide array of existing astronomy software through the standard INDI MoonLite driver (and any other Moonlite-compatible client), enhancing its usability and versatility.
 Getting Started
 
 ## To get started with the Realta EBBfocuser Project, you will need:
