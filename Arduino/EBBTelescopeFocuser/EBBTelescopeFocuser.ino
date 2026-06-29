@@ -12,6 +12,16 @@
 #define D_DRIVER_ADDRESS 0b00
 #define D_R_SENSE       0.11f
 
+// Motor: NEMA 17 17HS4023 (1.8°, 200 steps/rev)
+//   Rated current : 0.7 A/phase   Phase resistance : ~4 Ω   Inductance : ~3.2 mH/phase
+//   Rated voltage : 0.7 A × 4 Ω ≈ 2.8 V  (informational only — the TMC2209 is a
+//                   current-chopper driver, so motor voltage is not programmed; the
+//                   coil voltage is regulated automatically from the EBB36 bus supply.)
+// rms_current() takes the RMS coil current; peak phase current = RMS × √2. To keep the
+// peak at the 0.7 A rating we run 700 / √2 ≈ 495 mA RMS (rounded to 500). This is plenty
+// of torque for a focuser and keeps the motor cool near the optics.
+#define D_MOTOR_RMS_MA  500
+
 // NTC 100 kΩ @ 25 °C, β = 3950, pull-up 4.7 kΩ
 #define NTC_BETA        3950.0f
 #define NTC_R0          100000.0f
@@ -210,7 +220,7 @@ void setup()
   if (isFirstRun != 6)
   {
     EEPROM.put(1,  (long)50000);  // CurrentPosition
-    EEPROM.put(10, (int)500);     // motor current mA
+    EEPROM.put(10, (int)D_MOTOR_RMS_MA);  // motor RMS current mA (17HS4023: 0.7 A peak)
     EEPROM.put(20, (int)8);       // microsteps (half-step mode)
     EEPROM.put(30, (byte)2);      // step delay
     EEPROM.put(31, (byte)1);      // step mode: half step
@@ -266,7 +276,7 @@ void setup()
   MyMotor.beginSerial(19200);
   MyMotor.begin();
   MyMotor.toff(5);
-  MyMotor.rms_current(MyMotor.current);
+  MyMotor.rms_current(MyMotor.current);  // RMS mA; 500 ≈ 0.7 A peak (17HS4023 rated)
   MyMotor.microsteps(MyMotor.steps);
   MyMotor.en_spreadCycle(false);
   MyMotor.pwm_autoscale(true);

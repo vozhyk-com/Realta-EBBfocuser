@@ -69,13 +69,19 @@ power cycles. The layout is:
 |-------|--------|-------|
 |0|First-run flag|`6`|
 |1–4|Current position (long)|50000|
-|10–11|Motor current (mA)|500|
+|10–11|Motor RMS current (mA)|500|
 |20–21|Microsteps (half-step mode)|8|
 |30|Step delay (Moonlite units)|2|
 |31|Step mode (0 = full, 1 = half)|1|
 |32–33|Stall threshold (`sg_result`, 0 = disabled)|0|
 
 On first boot (or after the flag is cleared) the defaults above are written automatically.
+
+The default current suits the stock **NEMA 17 17HS4023** (0.7 A/phase, ~4 Ω, ~2.8 V rated
+coil voltage). The TMC2209 is a current-chopper driver, so motor voltage is regulated
+automatically and never programmed — only the coil current matters. `rms_current()` takes
+the **RMS** current, and peak phase current = RMS × √2, so 500 mA RMS ≈ the motor's 0.7 A
+rated peak. For a different motor, set the current to its rated peak ÷ √2.
 
 ## Future plans/changes
 
