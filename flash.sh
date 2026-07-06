@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+# Usage: flash.sh [--no-erase]
+#   By default a full chip erase is performed before flashing so the emulated
+#   EEPROM is cleared and the firmware's first-run defaults (motor current,
+#   position 50000, microsteps, ...) are re-applied on next boot.
+#   Pass --no-erase to keep the stored settings across a firmware update.
 set -euo pipefail
 
 SKETCH="$(dirname "$0")/Arduino/EBBTelescopeFocuser"
@@ -9,7 +14,7 @@ DFU_PID="df11"
 
 #export PATH="$STM32CP_BIN:$PATH"
 
-# ── helpers ────────────────────────────────────────────────────────────────
+# ── helpers ──────────────────────────────────────────────────────────────────
 
 die()  { echo "ERROR: $*" >&2; exit 1; }
 info() { echo "[+] $*"; }
@@ -36,7 +41,7 @@ command -v arduino-cli   >/dev/null || die "arduino-cli not found"
 command -v STM32_Programmer.sh >/dev/null || die "STM32_Programmer.sh not found"
 [[ -d "$SKETCH" ]]       || die "Sketch not found: $SKETCH"
 
-# ── compile ────────────────────────────────────────────────────────────────
+# ── compile ────────────────────────────────────────────────────────────────────
 
 info "Compiling $SKETCH ..."
 arduino-cli compile \
@@ -44,9 +49,18 @@ arduino-cli compile \
     "$SKETCH"
 info "Compilation successful."
 
-# ── wait for DFU + upload ─────────────────────────────────────────────────
+# ── wait for DFU + erase + upload ─────────────────────────────────────────────
+
+ERASE=1
+[[ "${1:-}" == "--no-erase" ]] && ERASE=0
 
 wait_for_dfu
+
+if (( ERASE )); then
+    info "Full chip erase (clears emulated EEPROM: position and motor settings) ..."
+    STM32_Programmer.sh -c port=usb1 -e all
+    wait_for_dfu
+fi
 
 info "Uploading firmware ..."
 arduino-cli upload \
