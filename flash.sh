@@ -14,7 +14,7 @@ DFU_PID="df11"
 
 #export PATH="$STM32CP_BIN:$PATH"
 
-# ── helpers ──────────────────────────────────────────────────────────────────
+# ── helpers ────────────────────────────────────────────────────────────────
 
 die()  { echo "ERROR: $*" >&2; exit 1; }
 info() { echo "[+] $*"; }
@@ -41,7 +41,7 @@ command -v arduino-cli   >/dev/null || die "arduino-cli not found"
 command -v STM32_Programmer.sh >/dev/null || die "STM32_Programmer.sh not found"
 [[ -d "$SKETCH" ]]       || die "Sketch not found: $SKETCH"
 
-# ── compile ────────────────────────────────────────────────────────────────────
+# ── compile ────────────────────────────────────────────────────────────────
 
 info "Compiling $SKETCH ..."
 arduino-cli compile \
@@ -49,7 +49,7 @@ arduino-cli compile \
     "$SKETCH"
 info "Compilation successful."
 
-# ── wait for DFU + erase + upload ─────────────────────────────────────────────
+# ── wait for DFU + erase + upload ─────────────────────────────────────────
 
 ERASE=1
 [[ "${1:-}" == "--no-erase" ]] && ERASE=0
